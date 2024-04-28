@@ -8,9 +8,12 @@ using Newtonsoft.Json;
 using FishNet.Object;
 using FishNet.Transporting.Tugboat;
 using UnityEngine;
+using Michsky.MUIP;
 
 public class MatchmakingManager : NetworkBehaviour
 {
+    public NotificationManager notificationManager;
+    
     private static readonly HttpClient _httpClient = new HttpClient();
     private static readonly string _matchmakerUrl = "https://mini-game-main-7eeda68ee38593.edgegap.net/";
     private static readonly string _apiToken = "token b6f27fc9-e522-4a8c-a41c-591c92e90dc1";
@@ -31,16 +34,26 @@ public class MatchmakingManager : NetworkBehaviour
         {
             // Call the GetTicket function with the current ticketID
             bool gotTicket = GetTicket(ticketId);
+            
+            notificationManager.title = "Matchmaking";
+            notificationManager.description = "Searching for a match...";
+            notificationManager.Open();
 
             // Check if GetTicket returned true, and stop the coroutine if so
             if (gotTicket)
             {
                 Debug.Log("Server Found");
+
+                notificationManager.title = "Found Match";
+                notificationManager.description = "A match has been found, connecting to the server...";
+                
                 isCoroutineRunning = false;
             }
 
             // Wait for 5 seconds before the next iteration
             yield return new WaitForSeconds(5f);
+
+            notificationManager.Close();
         }
     }
 
@@ -93,6 +106,9 @@ public class MatchmakingManager : NetworkBehaviour
                         {
                             Debug.LogError("Unable to parse the second part as ushort");
 
+                            notificationManager.title = "Matchmaking Failed";
+                            notificationManager.description = "Unable to match with a server. Please try again later.";
+
                             isCoroutineRunning = false;
                             
                             return false;
@@ -103,6 +119,9 @@ public class MatchmakingManager : NetworkBehaviour
                         // Handle any exceptions that may occur during DNS resolution
                         Debug.LogError("Error resolving DNS: " + e.Message);
 
+                        notificationManager.title = "Matchmaking Failed";
+                        notificationManager.description = "Unable to match with a server. Please try again later.";
+
                         isCoroutineRunning = false;
                     }
 
@@ -111,6 +130,9 @@ public class MatchmakingManager : NetworkBehaviour
                 else
                 {
                     Debug.LogError("Invalid serverHost format");
+
+                    notificationManager.title = "Matchmaking Failed";
+                    notificationManager.description = "Unable to match with a server. Please try again later.";
                     
                     return false;
                 }
@@ -119,12 +141,18 @@ public class MatchmakingManager : NetworkBehaviour
             {
                 Debug.Log("Server Not Found");
 
+                notificationManager.title = "Matchmaking Failed";
+                notificationManager.description = "Unable to match with a server. Please try again later.";
+
                 return false;
             }
         }
         else
         {
             Debug.LogError("Ticket not found");
+
+            notificationManager.title = "Matchmaking Failed";
+            notificationManager.description = "Unable to match with a server. Please try again later.";
 
             return false;
         }
