@@ -434,6 +434,11 @@ namespace Edgegap.Editor
         /// </summary>
         private void unregisterClickEvents()
         {
+            if(_debugBtn == null || _apiTokenVerifyBtn == null || _apiTokenGetBtn == null || _appCreateBtn == null || _appLoadExistingBtn == null || _containerBuildAndPushServerBtn == null || _deploymentConnectionCopyUrlBtn == null || _deploymentsRefreshBtn == null || _deploymentsCreateBtn == null || _footerDocumentationBtn == null || _footerNeedMoreGameServersBtn == null)
+            {
+                return;
+            }
+            
             _debugBtn.clickable.clicked -= onDebugBtnClick;
 
             _apiTokenVerifyBtn.clickable.clicked -= onApiTokenVerifyBtnClick;
