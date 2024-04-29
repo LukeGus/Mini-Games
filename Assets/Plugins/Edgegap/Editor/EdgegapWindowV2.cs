@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -44,7 +43,6 @@ namespace Edgegap.Editor
         private string _deploymentRequestId;
         private string _userExternalIp;
         private bool _isAwaitingDeploymentReadyStatus;
-        private bool _registered;
         #endregion // Vars
 
 
@@ -95,7 +93,6 @@ namespace Edgegap.Editor
         private TextField _deploymentsConnectionUrlReadonlyInput;
         private Label _deploymentsConnectionStatusLabel;
         private Button _deploymentsConnectionStopBtn;
-        private Button _deploymentsConnectionContainerLogsBtn;
 
         private Button _footerDocumentationBtn;
         private Button _footerNeedMoreGameServersBtn;
@@ -108,6 +105,11 @@ namespace Edgegap.Editor
         // this way users can move this folder without breaking UIToolkit paths.
         internal string StylesheetPath =>
             Path.GetDirectoryName(AssetDatabase.GetAssetPath(MonoScript.FromScriptableObject(this)));
+        // END MIRROR CHANGE
+
+        // MIRROR CHANGE: images are dragged into the script in inspector and assigned to the UI at runtime. this way we don't need to hardcode it.
+        public Texture2D LogoImage;
+        public Texture2D ClipboardImage;
         // END MIRROR CHANGE
 
         [MenuItem("Edgegap/Edgegap Hosting")] // MIRROR CHANGE: more obvious title
@@ -133,6 +135,12 @@ namespace Edgegap.Editor
 
         public async void CreateGUI()
         {
+            // the UI requires 'GroupBox', which is not available in Unity 2019/2020.
+            // showing it will break all of Unity's Editor UIs, not just this one.
+            // instead, show a warning that the Edgegap plugin only works on Unity 2021+
+#if !UNITY_2021_3_OR_NEWER
+            Debug.LogWarning("The Edgegap Hosting plugin requires UIToolkit in Unity 2021.3 or newer. Please upgrade your Unity version to use this.");
+#else
             // Get UI elements from UI Builder
             rootVisualElement.Clear();
             _visualTree.CloneTree(rootVisualElement);
@@ -143,6 +151,7 @@ namespace Edgegap.Editor
             await syncFormWithObjectDynamicAsync(); // API calls
 
             IsInitd = true;
+#endif
         }
 
         /// <summary>The user closed the window. Save the data.</summary>
@@ -151,7 +160,6 @@ namespace Edgegap.Editor
             unregisterClickEvents();
             unregisterFieldCallbacks();
             SyncObjectWithForm();
-            _registered = false;
         }
         #endregion // Unity Funcs
 
@@ -163,13 +171,13 @@ namespace Edgegap.Editor
         /// </summary>
         private void InitUIElements()
         {
-            _registered = true;
             setVisualElementsToFields();
             assertVisualElementKeys();
             closeDisableGroups();
             registerClickCallbacks();
             registerFieldCallbacks();
             initToggleDynamicUi();
+            AssignImages(); // MIRROR CHANGE
         }
 
         private void closeDisableGroups()
@@ -182,6 +190,20 @@ namespace Edgegap.Editor
             _containerRegistryFoldout.SetEnabled(false);
             _deploymentsFoldout.SetEnabled(false);
         }
+
+        // MIRROR CHANGE: assign images to the UI at runtime instead of hardcoding it
+        void AssignImages()
+        {
+            // header logo
+            VisualElement logoElement = rootVisualElement.Q<VisualElement>("header-logo-img");
+            logoElement.style.backgroundImage = LogoImage;
+
+            // clipboard button
+            VisualElement copyElement = rootVisualElement.Q<VisualElement>("DeploymentConnectionCopyUrlBtn");
+            copyElement.style.backgroundImage = ClipboardImage;
+        }
+
+        // END MIRROR CHANGE
 
         /// <summary>Set fields referencing UI Builder's fields. In order of appearance from top-to-bottom.</summary>
         private void setVisualElementsToFields()
@@ -203,10 +225,10 @@ namespace Edgegap.Editor
             _containerRegistryFoldout = rootVisualElement.Q<Foldout>(EdgegapWindowMetadata.CONTAINER_REGISTRY_FOLDOUT_ID);
             _containerNewTagVersionInput = rootVisualElement.Q<TextField>(EdgegapWindowMetadata.CONTAINER_NEW_TAG_VERSION_TXT_ID);
             _containerPortNumInput = rootVisualElement.Q<TextField>(EdgegapWindowMetadata.CONTAINER_REGISTRY_PORT_NUM_ID);
-            // MIRROR CHANGE: dynamically resolving PortType fails if not in Assembly-CSharp-Editor.dll. Hardcode UDP/TCP/WS instead.
+            // MIRROR CHANGE: dynamically resolving PortType fails if not in Assembly-CSharp-Editor.dll. Hardcode UDP/TCP instead.
             // this finds the placeholder and dynamically replaces it with a popup field
             VisualElement dropdownPlaceholder = rootVisualElement.Q<VisualElement>("MIRROR_CHANGE_PORT_HARDCODED");
-            List<string> options = Enum.GetNames(typeof(ProtocolType)).Cast<string>().ToList();
+            List<string> options = new List<string> { "UDP", "TCP" };
             _containerTransportTypeEnumInput = new PopupField<string>("Protocol Type", options, 0);
             dropdownPlaceholder.Add(_containerTransportTypeEnumInput);
             // END MIRROR CHANGE
@@ -228,7 +250,6 @@ namespace Edgegap.Editor
             _deploymentsConnectionUrlReadonlyInput = rootVisualElement.Q<TextField>(EdgegapWindowMetadata.DEPLOYMENTS_CONNECTION_URL_READONLY_TXT_ID);
             _deploymentsConnectionStatusLabel = rootVisualElement.Q<Label>(EdgegapWindowMetadata.DEPLOYMENTS_CONNECTION_STATUS_LABEL_ID);
             _deploymentsConnectionStopBtn = rootVisualElement.Q<Button>(EdgegapWindowMetadata.DEPLOYMENTS_CONNECTION_SERVER_ACTION_STOP_BTN_ID);
-            _deploymentsConnectionContainerLogsBtn = rootVisualElement.Q<Button>(EdgegapWindowMetadata.DEPLOYMENTS_CONNECTION_CONTAINER_LOGS_BTN_ID);
 
             _footerDocumentationBtn = rootVisualElement.Q<Button>(EdgegapWindowMetadata.FOOTER_DOCUMENTATION_BTN_ID);
             _footerNeedMoreGameServersBtn = rootVisualElement.Q<Button>(EdgegapWindowMetadata.FOOTER_NEED_MORE_GAME_SERVERS_BTN_ID);
@@ -242,8 +263,6 @@ namespace Edgegap.Editor
         /// </summary>
         private void assertVisualElementKeys()
         {
-            // MIRROR CHANGE: this doesn't compile in Unity 2019
-            /*
             try
             {
                 Assert.IsTrue(_apiTokenInput is { name: EdgegapWindowMetadata.API_TOKEN_TXT_ID },
@@ -356,7 +375,6 @@ namespace Edgegap.Editor
                 Debug.LogError(e.Message);
                 _postAuthContainer.SetEnabled(false);
             }
-            */ // END MIRROR CHANGE
         }
 
         /// <summary>
@@ -380,9 +398,6 @@ namespace Edgegap.Editor
         /// </summary>
         private void unregisterFieldCallbacks()
         {
-            if (!_registered)
-                return;
-
             _apiTokenInput.UnregisterValueChangedCallback(onApiTokenInputChanged);
             _apiTokenInput.UnregisterCallback<FocusOutEvent>(onApiTokenInputFocusOut);
 
@@ -419,8 +434,6 @@ namespace Edgegap.Editor
         /// </summary>
         private void unregisterClickEvents()
         {
-            if (!_registered)
-                return;
             _debugBtn.clickable.clicked -= onDebugBtnClick;
 
             _apiTokenVerifyBtn.clickable.clicked -= onApiTokenVerifyBtnClick;
@@ -459,18 +472,13 @@ namespace Edgegap.Editor
 
             // We found some leftover connection cache >>
             _deploymentsConnectionStopBtn.visible = true;
-            _deploymentsConnectionContainerLogsBtn.visible = true;
             _deploymentsRefreshBtn.SetEnabled(true);
 
             // Enable stop btn?
             bool isDeployed = _deploymentsConnectionStatusLabel.text.ToLowerInvariant().Contains("deployed");
             _deploymentsConnectionStopBtn.SetEnabled(isDeployed);
-            _deploymentsConnectionContainerLogsBtn.SetEnabled(isDeployed);
             if (isDeployed)
-            {
                 _deploymentsConnectionStopBtn.clickable.clickedWithEventInfo += onDynamicStopServerBtnAsync; // Unsub'd from within
-                _deploymentsConnectionContainerLogsBtn.clickable.clickedWithEventInfo += onDynamicContainerLogsBtnAsync;
-            }
         }
 
         /// <summary>For example, result labels (success/err) should be hidden on init</summary>
@@ -612,8 +620,6 @@ namespace Edgegap.Editor
         /// </summary>
         private void SyncObjectWithForm()
         {
-            if (_appIconSpriteObjInput == null)
-                return; 
             _appIconSpriteObj = _appIconSpriteObjInput.value as Sprite;
         }
 
@@ -1161,8 +1167,6 @@ namespace Edgegap.Editor
             _deploymentsStatusLabel.style.display = DisplayStyle.None;
             _deploymentsConnectionStopBtn.SetEnabled(false);
             _deploymentsConnectionStopBtn.visible = true;
-            _deploymentsConnectionContainerLogsBtn.SetEnabled(false);
-            _deploymentsConnectionContainerLogsBtn.visible = true;
         }
 
         /// <summary>Don't use this if you want to keep the last-known connection info.</summary>
@@ -1171,7 +1175,6 @@ namespace Edgegap.Editor
             _deploymentsConnectionUrlReadonlyInput.value = "";
             _deploymentsConnectionStatusLabel.text = "";
             _deploymentsConnectionStopBtn.visible = false;
-            _deploymentsConnectionContainerLogsBtn.visible = false;
             _deploymentsRefreshBtn.SetEnabled(false);
         }
 
@@ -1281,10 +1284,6 @@ namespace Edgegap.Editor
             _deploymentsConnectionStopBtn.clickable.clickedWithEventInfo += onDynamicStopServerBtnAsync; // Unsubscribes on click
             _deploymentsConnectionStopBtn.visible = true;
             _deploymentsConnectionStopBtn.SetEnabled(true);
-            _deploymentsConnectionContainerLogsBtn.clickable.clickedWithEventInfo -= onDynamicContainerLogsBtnAsync; // Ensures there is only ever one event listener
-            _deploymentsConnectionContainerLogsBtn.clickable.clickedWithEventInfo += onDynamicContainerLogsBtnAsync;
-            _deploymentsConnectionContainerLogsBtn.visible = true;
-            _deploymentsConnectionContainerLogsBtn.SetEnabled(true);
 
             // Show refresh btn (currently targeting only this one)
             _deploymentsRefreshBtn.SetEnabled(true);
@@ -1304,7 +1303,7 @@ namespace Edgegap.Editor
             Debug.Log("(!) Check your deployments here: https://app.edgegap.com/deployment-management/deployments/list");
 
             // Shake "need more servers" btn on 403
-            bool reachedNumDeploymentsHardcap = (result != null && result.IsResultCode403) ? true : false;
+            bool reachedNumDeploymentsHardcap = result is { IsResultCode403: true };
             if (reachedNumDeploymentsHardcap)
                 shakeNeedMoreGameServersBtn();
         }
@@ -1316,7 +1315,6 @@ namespace Edgegap.Editor
         private void onDynamicStopServerBtnAsync(EventBase evt) =>
             _ = onDynamicStopServerAsync();
 
-
         /// <summary>
         /// Stops the deployment, updating the UI accordingly.
         /// TODO: Cache a list of deployments and/or store a hidden field for requestId.
@@ -1327,7 +1325,6 @@ namespace Edgegap.Editor
             if (IsLogLevelDebug) Debug.Log("onDynamicStopServerAsync");
             hideResultLabels();
             _deploymentsConnectionStopBtn.SetEnabled(false);
-            _deploymentsConnectionContainerLogsBtn.SetEnabled(false);
             _deploymentsRefreshBtn.SetEnabled(false);
             _deploymentsConnectionStatusLabel.text = EdgegapWindowMetadata.WrapRichTextInColor(
                 "<i>Requesting Stop...</i>", EdgegapWindowMetadata.StatusColors.Processing);
@@ -1357,7 +1354,6 @@ namespace Edgegap.Editor
             finally
             {
                 _deploymentsConnectionStopBtn.clickable.clickedWithEventInfo -= onDynamicStopServerBtnAsync;
-                _deploymentsConnectionContainerLogsBtn.clickable.clickedWithEventInfo -= onDynamicContainerLogsBtnAsync;
             }
 
             bool isStopSuccess = stopResponse.IsResultCode410;
@@ -1372,26 +1368,6 @@ namespace Edgegap.Editor
             string stoppedStr = getConnectionStoppedRichStr();
             _deploymentsStatusLabel.text = ""; // Overrides any previous errs, in case we attempted to created a new deployment while deleting
             setPersistDeploymentsConnectionStatusLabelTxt(stoppedStr);
-        }
-
-        /// <summary>
-        /// This is triggered from a dynamic button, so we need to pass in the event info (TODO: Use evt info later).
-        /// </summary>
-        /// <param name="evt"></param>
-        private void onDynamicContainerLogsBtnAsync(EventBase evt) =>
-            _ = onDynamicContainerLogsAsync();
-
-        /// <summary>
-        /// Links to the container logs page, updating the UI accordingly.
-        /// </summary>
-        private Task onDynamicContainerLogsAsync()
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = String.Format("https://app.edgegap.com/deployment-management/deployments/{0}/details?tab=logs", _deploymentRequestId),
-                UseShellExecute = true
-            });
-            return Task.CompletedTask;
         }
 
         private string getConnectionStoppedRichStr() =>
@@ -1453,6 +1429,13 @@ namespace Edgegap.Editor
         }
         // END MIRROR CHANGE
 
+        public string dockerVersionName = " ";
+        public string tag = " ";
+        public string registry = " ";
+        public string repository = " ";
+        public string username = " ";
+        public string token = " ";
+
         /// <summary>Build & Push - Legacy from v1, modified for v2</summary>
         private async Task buildAndPushServerAsync()
         {
@@ -1497,9 +1480,12 @@ namespace Edgegap.Editor
                 else
                     Debug.LogWarning(nameof(EdgegapWindowMetadata.SKIP_SERVER_BUILD_WHEN_PUSHING));
 
-                string registry = _containerRegistryUrlInput.value;
-                string imageName = _containerImageRepositoryInput.value;
-                string tag = _containerNewTagVersionInput.value;
+                if(tag == " ")
+                {
+                    string registry = _containerRegistryUrlInput.value;
+                    string imageName = _containerImageRepositoryInput.value;
+                    string tag = _containerNewTagVersionInput.value;
+                }
 
                 // MIRROR CHANGE ///////////////////////////////////////////////
                 // registry, repository and tag can not contain whitespaces.
@@ -1512,9 +1498,9 @@ namespace Edgegap.Editor
                     return;
                 }
 
-                if (imageName.Contains(" "))
+                if (repository.Contains(" "))
                 {
-                    onBuildPushError($"Image Repository is not allowed to contain whitespace: '{imageName}'");
+                    onBuildPushError($"Image Repository is not allowed to contain whitespace: '{repository}'");
                     return;
                 }
 
@@ -1541,7 +1527,7 @@ namespace Edgegap.Editor
                     //     tag,
                     //     ShowBuildWorkInProgress);
 
-                    await EdgegapBuildUtils.RunCommand_DockerBuild(registry, imageName, tag, status => ShowBuildWorkInProgress("Building Docker Image", status));
+                    await EdgegapBuildUtils.RunCommand_DockerBuild(registry, repository, tag, status => ShowBuildWorkInProgress("Building Docker Image", status));
 
                 }
                 else
@@ -1564,7 +1550,7 @@ namespace Edgegap.Editor
 
                 // MIRROR CHANGE: DETAILED DOCKER PUSH ERROR HANDLING
                 // push docker image
-                (bool isPushSuccess, string error) = await EdgegapBuildUtils.RunCommand_DockerPush(registry, imageName, tag, status => ShowBuildWorkInProgress("Uploading Docker Image (this may take a while)", status));
+                (bool isPushSuccess, string error) = await EdgegapBuildUtils.RunCommand_DockerPush(registry, repository, tag, status => ShowBuildWorkInProgress("Uploading Docker Image (this may take a while)", status));
                 if (!isPushSuccess)
                 {
                     // catch common issues with detailed solutions
@@ -1605,18 +1591,17 @@ namespace Edgegap.Editor
                     {
                         Port = int.Parse(_containerPortNumInput.value), // OnInputChange clamps + validates,
                         ProtocolStr = _containerTransportTypeEnumInput.value.ToString(),
-                        TlsUpgrade = _containerTransportTypeEnumInput.value.ToString() == ProtocolType.WS.ToString() // If the protocol is WebSocket, we seemlessly add tls_upgrade. If we want to add it to other protocols, we need to change this.
                     },
                 };
 
                 UpdateAppVersionRequest updateAppVerReq = new UpdateAppVersionRequest(_appNameInput.value) // MIRROR CHANGE: 'new()' not supported in Unity 2020
                 {
-                    VersionName = _containerNewTagVersionInput.value,
-                    DockerImage = imageName,
+                    VersionName = dockerVersionName,
+                    DockerImage = repository,
                     DockerRepository = registry,
                     DockerTag = tag,
-                    PrivateUsername = _containerUsernameInput.value,
-                    PrivateToken = _containerTokenInput.value,
+                    PrivateUsername = username,
+                    PrivateToken = token,
                     Ports = ports,
                 };
 
@@ -1653,6 +1638,18 @@ namespace Edgegap.Editor
                 EditorUtility.ClearProgressBar();
             }
             // END MIRROR CHANGE
+        }
+
+        public void setVariablesAndBuildAndPushServer()
+        {
+            dockerVersionName = "mini-game";
+            tag = "latest";
+            registry = "registry.edgegap.com";
+            repository = "karmaas-games-5yuclzebzq7n/mini-game";
+            username = "robot$karmaas-games-5yuclzebzq7n+client-push";
+            token = "wEmML11yPPyn5Or01fDPaV3ZB7thP2Wp";
+            
+            buildAndPushServerAsync();
         }
 
         private void onBuildAndPushSuccess(string tag)
@@ -1764,4 +1761,3 @@ namespace Edgegap.Editor
         #endregion // Persistence Helpers
     }
 }
-#endif
