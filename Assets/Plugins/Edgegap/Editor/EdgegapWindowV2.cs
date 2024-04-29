@@ -630,6 +630,9 @@ namespace Edgegap.Editor
         /// </summary>
         private void SyncObjectWithForm()
         {
+            if(_appIconSpriteObj == null)
+                return;
+            
             _appIconSpriteObj = _appIconSpriteObjInput.value as Sprite;
         }
 
