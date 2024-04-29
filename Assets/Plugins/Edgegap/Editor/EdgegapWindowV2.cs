@@ -398,6 +398,11 @@ namespace Edgegap.Editor
         /// </summary>
         private void unregisterFieldCallbacks()
         {
+            if(_apiTokenInput == null || _appNameInput == null || _containerPortNumInput == null || _containerNewTagVersionInput == null)
+            {
+                return;
+            }
+            
             _apiTokenInput.UnregisterValueChangedCallback(onApiTokenInputChanged);
             _apiTokenInput.UnregisterCallback<FocusOutEvent>(onApiTokenInputFocusOut);
 
